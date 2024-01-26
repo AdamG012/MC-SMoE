@@ -8,7 +8,7 @@ import wandb
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from fire import Fire
 from torch.utils.data import DataLoader
 from tqdm import tqdm
