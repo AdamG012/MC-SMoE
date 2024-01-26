@@ -39,6 +39,17 @@ accelerate launch --config_file static/finetune_config.yaml \
   --output_dir="${OUTPUT_DIR}" 2>&1 | tee -a "${OUTPUT_DIR}/output.log" && echo "DONE" > "${OUTPUT_DIR}/done.txt"
 
 # STEP 2 RUN
+OUTPUT_PERM_DIR="results/${TASK}/permuted/switch-${NUM_EXPERTS}"
+DATE_TIME=`date +"%Y-%m-%d-%H:%M:%S"`;
+OUTPUT_PERM_DIR="${OUTPUT_PERM_DIR}-${DATE_TIME}/${HOST}";
+mkdir -p "${OUTPUT_PERM_DIR}";
+accelerate launch --config_file static/finetune_config.yaml \
+  mcsmoe/permute-model.py \
+  --checkpoint="${OUTPUT_DIR}/latest" \
+  --save_dir="${OUTPUT_PERM_DIR}" \
+  --include_wo=True
+
+# STEP 3 RUN
 OUTPUT_MERGE_DIR="results/${TASK}/msmoe/switch-${NUM_EXPERTS}"
 DATE_TIME=`date +"%Y-%m-%d-%H:%M:%S"`;
 OUTPUT_MERGE_DIR="${OUTPUT_MERGE_DIR}-${DATE_TIME}/${HOST}";
@@ -76,9 +87,10 @@ accelerate launch --config_file static/finetune_config.yaml \
   --encoder_merging_layers="3,5,7,9,11" \
   --decoder_merging_layers="1,3,5,7,9,11" \
   --output_dir="${OUTPUT_MERGE_DIR}" \
-  --teacher_checkpoint="${OUTPUT_DIR}/latest" 2>&1 | tee -a "${OUTPUT_MERGE_DIR}/output.log" && echo "DONE" > "${OUTPUT_MERGE_DIR}/done.txt"
+  --student_checkpoint="${OUTPUT_PERM_DIR}/latest" \
+  --teacher_checkpoint="${OUTPUT_PERM_DIR}/latest" 2>&1 | tee -a "${OUTPUT_MERGE_DIR}/output.log" && echo "DONE" > "${OUTPUT_MERGE_DIR}/done.txt";
 
-# STEP 3 RUN
+# STEP 4 RUN
 OUTPUT_COMP_DIR="results/${TASK}/mcsmoe/switch-${NUM_EXPERTS}"
 DATE_TIME=`date +"%Y-%m-%d-%H:%M:%S"`;
 OUTPUT_COMP_DIR="${OUTPUT_COMP_DIR}-${DATE_TIME}/${HOST}";
@@ -104,7 +116,7 @@ accelerate launch --config_file static/finetune_config.yaml \
   --hd_lambda=0.0 \
   --task="copa" \
   --output_dir="${OUTPUT_COMP_DIR}" \
-  --teacher_checkpoint="${OUTPUT_DIR}/latest" \
+  --teacher_checkpoint="${OUTPUT_PERM_DIR}/latest" \
   --student_checkpoint="${OUTPUT_MERGE_DIR}/latest" \
   --final_threshold=0.10 \
   --low_rank_factor=32 2>&1 | tee -a "${OUTPUT_COMP_DIR}/output.log" && echo "DONE" > "${OUTPUT_COMP_DIR}/done.txt";
