@@ -2,7 +2,7 @@
 export NCCL_P2P_DISABLE=1
 export CUDA_VISIBLE_DEVICES=0
 
-# TODO(Amir): Change it to specified location
+
 TASK="multirc";
 NUM_EXPERTS=64;
 CHECKPOINT="/workdir/switch-base-${NUM_EXPERTS}";

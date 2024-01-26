@@ -42,7 +42,8 @@ accelerate launch --config_file static/finetune_config.yaml \
 OUTPUT_PERM_DIR="results/${TASK}/permuted/switch-${NUM_EXPERTS}"
 DATE_TIME=`date +"%Y-%m-%d-%H:%M:%S"`;
 OUTPUT_PERM_DIR="${OUTPUT_PERM_DIR}-${DATE_TIME}/${HOST}";
-mkdir -p "${OUTPUT_PERM_DIR}";
+# This gets auto-created by permute-model
+# mkdir -p "${OUTPUT_PERM_DIR}";
 accelerate launch --config_file static/finetune_config.yaml \
   mcsmoe/permute-model.py \
   --checkpoint="${OUTPUT_DIR}/latest" \
@@ -74,13 +75,12 @@ accelerate launch --config_file static/finetune_config.yaml \
   --mlm_lambda=1.0 \
   --kd_lambda=0.2 \
   --hd_lambda=0 \
-  --task="copa" \
+  --task="${TASK}" \
   --merging_strategy="normal" \
   --exact_fisher=False \
   --num_samples_for_merging=256 \
   --similarity_base="router-logits" \
   --reverse_similarity=False \
-  --similarity_fn="cosine" \
   --num_groups=8 \
   --globally_group=True \
   --permute_when_merge=False \
@@ -88,8 +88,8 @@ accelerate launch --config_file static/finetune_config.yaml \
   --encoder_merging_layers="3,5,7,9,11" \
   --decoder_merging_layers="1,3,5,7,9,11" \
   --output_dir="${OUTPUT_MERGE_DIR}" \
-  --student_checkpoint="${OUTPUT_PERM_DIR}/latest" \
-  --teacher_checkpoint="${OUTPUT_PERM_DIR}/latest" 2>&1 | tee -a "${OUTPUT_MERGE_DIR}/output.log" && echo "DONE" > "${OUTPUT_MERGE_DIR}/done.txt";
+  --student_checkpoint="${OUTPUT_PERM_DIR}" \
+  --teacher_checkpoint="${OUTPUT_PERM_DIR}" 2>&1 | tee -a "${OUTPUT_MERGE_DIR}/output.log" && echo "DONE" > "${OUTPUT_MERGE_DIR}/done.txt";
 
 # STEP 4 RUN
 OUTPUT_COMP_DIR="results/${TASK}/mcsmoe/switch-${NUM_EXPERTS}"
@@ -115,10 +115,10 @@ accelerate launch --config_file static/finetune_config.yaml \
   --mlm_lambda=1.0 \
   --kd_lambda=0.2 \
   --hd_lambda=0.0 \
-  --task="copa" \
+  --task="${TASK}" \
   --output_dir="${OUTPUT_COMP_DIR}" \
-  --teacher_checkpoint="${OUTPUT_PERM_DIR}/latest" \
-  --student_checkpoint="${OUTPUT_MERGE_DIR}/latest" \
+  --teacher_checkpoint="${OUTPUT_PERM_DIR}" \
+  --student_checkpoint="${OUTPUT_MERGE_DIR}/normal/router-logits/latest" \
   --final_threshold=0.10 \
   --low_rank_factor=32 2>&1 | tee -a "${OUTPUT_COMP_DIR}/output.log" && echo "DONE" > "${OUTPUT_COMP_DIR}/done.txt";
 

@@ -3,7 +3,6 @@ export NCCL_IB_DISABLE=1
 export NCCL_IBEXT_DISABLE=1
 export CUDA_VISIBLE_DEVICES=0,1
 
-# TODO(Amir): Change it to specified location
 TASK="copa";
 NUM_EXPERTS=32;
 CHECKPOINT="/workdir/switch-base-64";
