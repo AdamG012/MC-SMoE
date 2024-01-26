@@ -102,6 +102,9 @@ def merge_and_distill_downstream_for_recover(
         save_stable_rank: Optional[bool] = False,
         teacher_checkpoint: Optional[str] = None,
         student_checkpoint: Optional[str] = None,
+        checkpoint: Optional[str] = None,
+        dataset_path: Optional[str] = None,
+        metric_path: Optional[str] = None,
         task: Optional[str] = "sst2",
         merging_strategy: Optional[str] = "normal",
         num_samples_for_merging: Optional[int] = 32,
@@ -178,7 +181,8 @@ def merge_and_distill_downstream_for_recover(
         reg_lambda=training_config.reg_lambda,
     )
 
-    tokenizer = T5TokenizerFast.from_pretrained("google/switch-base-32")
+    checkpoint = f"google/switch-base-32" if checkpoint is None else checkpoint
+    tokenizer = T5TokenizerFast.from_pretrained(checkpoint)
     data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer,
                                            max_length=tokenizer.model_max_length,
                                            return_tensors='pt',
@@ -202,7 +206,12 @@ def merge_and_distill_downstream_for_recover(
                            'num_params': student_model.num_parameters()},
                    name=run_name)
 
-    raw_dataset = load_dataset(*TASK_MAPPING_DATASET_ARGUMENTS[task])
+    # Adam
+    raw_dataset = None
+    if dataset_path:
+        raw_dataset = load_from_disk(dataset_path=dataset_path)
+    else:
+        raw_dataset = load_dataset(*TASK_MAPPING_DATASET_ARGUMENTS[task])
 
     train_dataset = raw_dataset["train"]
     eval_dataset = raw_dataset["validation"] if task != "mnli" else (
@@ -378,7 +387,8 @@ def merge_and_distill_downstream_for_recover(
     evaluate_fn = get_evaluate_fn(
         task=task,
         tokenizer=tokenizer,
-        raw_eval_dataset=raw_dataset["validation"]
+        raw_eval_dataset=raw_dataset["validation"],
+        metric_path=metric_path,
     )
 
     # ========================= Training ================================

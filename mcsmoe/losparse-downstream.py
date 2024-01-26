@@ -8,7 +8,7 @@ import wandb
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from fire import Fire
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -78,6 +78,9 @@ def distill_downstream_for_losparse(
         teacher_checkpoint: Optional[str] = None,
         student_checkpoint: Optional[str] = None,
         task: Optional[str] = "sst2",
+        checkpoint: Optional[str] = None,
+        dataset_path: Optional[str] = None,
+        metric_path: Optional[str] = None,
         final_threshold: Optional[float] = 0.01,
         low_rank_factor: Optional[int] = 16,
         encoder_compression_layers: Optional[Union[str, List, int]] = None,
@@ -159,7 +162,8 @@ def distill_downstream_for_losparse(
         reg_lambda=0.0,
     )
 
-    tokenizer = T5TokenizerFast.from_pretrained("google/switch-base-32")
+    checkpoint = f"google/switch-base-32" if checkpoint is None else checkpoint
+    tokenizer = T5TokenizerFast.from_pretrained(checkpoint)
     data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer,
                                            max_length=tokenizer.model_max_length,
                                            return_tensors='pt',
@@ -176,7 +180,13 @@ def distill_downstream_for_losparse(
                            'num_params': student_model.num_parameters()},
                    name=run_name)
 
-    raw_dataset = load_dataset(*TASK_MAPPING_DATASET_ARGUMENTS[task])
+
+    # Adam
+    raw_dataset = None
+    if dataset_path:
+        raw_dataset = load_from_disk(dataset_path=dataset_path)
+    else:
+        raw_dataset = load_dataset(*TASK_MAPPING_DATASET_ARGUMENTS[task])
 
     train_dataset = raw_dataset["train"]
     eval_dataset = raw_dataset["validation"] if task != "mnli" else (
@@ -289,7 +299,8 @@ def distill_downstream_for_losparse(
     evaluate_fn = get_evaluate_fn(
         task=task,
         tokenizer=tokenizer,
-        raw_eval_dataset=raw_dataset["validation"]
+        raw_eval_dataset=raw_dataset["validation"],
+        metric_path=metric_path,
     )
 
     # ========================= Training ================================

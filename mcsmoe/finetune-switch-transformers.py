@@ -9,7 +9,7 @@ import wandb
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from fire import Fire
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -45,6 +45,8 @@ class SwitchFineTuningConfig:
 
 def finetune_on_downstream_task(
         checkpoint: Optional[str] = None,
+        dataset_path: Optional[str] = None,
+        metric_path: Optional[str] = None,
         output_dir: Optional[str] = None,
         task: Optional[str] = "cola",
         num_experts: Optional[int] = 32,
@@ -85,8 +87,7 @@ def finetune_on_downstream_task(
 
     model = SwitchTransformersForConditionalGeneration.from_pretrained(checkpoint)
     model = freeze_switch_routers_for_finetuning(model)
-
-    tokenizer = T5TokenizerFast.from_pretrained(f"google/switch-base-{num_experts}")
+    tokenizer = T5TokenizerFast.from_pretrained(checkpoint)
 
     data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer,
                                            max_length=tokenizer.model_max_length,
@@ -103,7 +104,13 @@ def finetune_on_downstream_task(
                        config={**model.config.__dict__, **training_config.__dict__},
                        name=f"switch-{num_experts}-{low_rank_factor_postfix}-{task}-{per_device_train_batch_size}-bs-{learning_rate}-lr")
 
-    raw_dataset = load_dataset(*TASK_MAPPING_DATASET_ARGUMENTS[task])
+
+    # Adam
+    raw_dataset = None
+    if dataset_path:
+        raw_dataset = load_from_disk(dataset_path=dataset_path)
+    else:
+        raw_dataset = load_dataset(*TASK_MAPPING_DATASET_ARGUMENTS[task])
 
     train_dataset = raw_dataset["train"]
     eval_dataset = raw_dataset["validation"] if task != "mnli" else (
@@ -204,7 +211,8 @@ def finetune_on_downstream_task(
     evaluate_fn = get_evaluate_fn(
         task=task,
         tokenizer=tokenizer,
-        raw_eval_dataset=raw_dataset['validation']
+        raw_eval_dataset=raw_dataset['validation'],
+        metric_path=metric_path,
     )
 
     num_eval_steps = num_update_steps_per_epoch if num_eval_steps is None else num_eval_steps

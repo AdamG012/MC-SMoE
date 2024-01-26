@@ -1,9 +1,11 @@
 import random
+import os
 from typing import Callable, Union, List, Optional, Dict
 
 import torch
 from datasets.arrow_dataset import Dataset
 from evaluate import load
+from datasets import load_metric
 from promptsource.templates import DatasetTemplates
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -21,21 +23,22 @@ EXTRA_KEYS_FOR_EVAL = ["id", "idx"]
 def get_evaluate_fn(
         task: str,
         tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
-        raw_eval_dataset: Optional[Dataset] = None
+        raw_eval_dataset: Optional[Dataset] = None,
+        metric_path: Optional[str] = None,
 ) -> Callable:
     if task in ["squad", "squad_v2", "hotpotqa"]:
-        return get_squad_evaluate_fn(tokenizer)
+        return get_squad_evaluate_fn(tokenizer, metric_path=metric_path)
     elif task == "openbookqa":
-        return get_openbookqa_evaluate_fn(tokenizer)
+        return get_openbookqa_evaluate_fn(tokenizer, metric_path=metric_path)
     elif task == "copa":
-        return get_copa_evaluate_fn(tokenizer, raw_eval_dataset)
+        return get_copa_evaluate_fn(tokenizer, raw_eval_dataset, metric_path=metric_path)
     elif task == "multirc":
-        return get_multirc_evaluate_fn(tokenizer)
+        return get_multirc_evaluate_fn(tokenizer, metric_path=metric_path)
     elif task == "stsb":
-        return get_stsb_evaluate_fn(tokenizer)
+        return get_stsb_evaluate_fn(tokenizer, metric_path=metric_path)
     else:
         # including other GLUE tasks, WinoGrande, WikiQA
-        return get_cls_evaluate_fn(task, tokenizer)
+        return get_cls_evaluate_fn(task, tokenizer, metric_path=metric_path)
 
 
 def get_classification_label_index_and_token_ids(
@@ -54,7 +57,8 @@ def get_classification_label_index_and_token_ids(
 
 def get_cls_evaluate_fn(
         task: str,
-        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
+        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+        metric_path: Optional[str] = None,
 ) -> Callable:
     """
     Get the evaluate function for GLUE tasks.
@@ -63,11 +67,25 @@ def get_cls_evaluate_fn(
     def evaluate_fn(predictions: Union[torch.Tensor, List[int], List[torch.LongTensor]], labels: torch.Tensor,
                     **kwargs):
         try:
-            metric = load(*TASK_MAPPING_DATASET_ARGUMENTS[task])
+            if metric_path:
+                if task == "wikiqa":
+                    metric = load_metric("/workdir/metrics/accuracy")
+                else:
+                    metric = load_metric(metric_path, TASK_MAPPING_DATASET_ARGUMENTS[task][-1])
+            else:
+                metric = load(*TASK_MAPPING_DATASET_ARGUMENTS[task])
         except FileNotFoundError:
             print(f"[Evaluation warning] No metric found for task {task}, using accuracy instead.")
-            metric = load("accuracy")
-        label_mapping_id = get_label_mapping_id(task)
+            if metric_path:
+                metric = load_metric("/workdir/metrics/accuracy")
+            else:
+                metric = load("accuracy")
+
+        label_mapping_id = None
+        if metric_path:
+            label_mapping_id = get_label_mapping_id(task, os.path.dirname(metric_path))
+        else:
+            label_mapping_id = get_label_mapping_id(task)
         eos_token_id = tokenizer.eos_token_id
         predictions = [p[:p.index(eos_token_id) + 1] if eos_token_id in p else p for
                        p in predictions]
@@ -96,7 +114,8 @@ def get_cls_evaluate_fn(
 
 
 def get_stsb_evaluate_fn(
-        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
+        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+        metric_path: Optional[str] = None,
 ) -> Callable:
     """
     Get the evaluate function for GLUE tasks.
@@ -111,7 +130,11 @@ def get_stsb_evaluate_fn(
 
     def evaluate_fn(predictions: Union[torch.Tensor, List[int], List[torch.LongTensor]], labels: torch.Tensor,
                     **kwargs):
-        metric = load(*TASK_MAPPING_DATASET_ARGUMENTS["stsb"])
+        metric = None
+        if metric_path:
+            metric = load_metric(metric_path, *TASK_MAPPING_DATASET_ARGUMENTS["stsb"][-1])
+        else:
+            metric = load(*TASK_MAPPING_DATASET_ARGUMENTS["stsb"])
         predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)  # string lengths batch
         references = labels.long().masked_fill(labels == -100, tokenizer.pad_token_id).tolist()
         references = tokenizer.batch_decode(references, skip_special_tokens=True)
@@ -134,15 +157,27 @@ def get_stsb_evaluate_fn(
     return evaluate_fn
 
 
-def get_multirc_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]) -> Callable:
+def get_multirc_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+                          metric_path: Optional[str] = None,
+                          ) -> Callable:
     """
     Get the evaluate function for SuperGLUE-MultiRC task.
     """
 
     def evaluate_fn(predictions: Union[torch.Tensor, List[int], List[torch.LongTensor]], labels: torch.Tensor,
                     ids: List[Dict[str, int]], **kwargs):
-        metric = load(*TASK_MAPPING_DATASET_ARGUMENTS['multirc'])
-        label_mapping_id = get_label_mapping_id('multirc')
+
+        metric = None
+        if metric_path:
+            metric = load_metric(metric_path, TASK_MAPPING_DATASET_ARGUMENTS['multirc'][-1])
+        else:
+            metric = load(*TASK_MAPPING_DATASET_ARGUMENTS['multirc'])
+
+        label_mapping_id = None
+        if metric_path:
+            label_mapping_id = get_label_mapping_id('multirc', os.path.dirname(metric_path))
+        else:
+            label_mapping_id = get_label_mapping_id('multirc')
         # cut up tokens after the first [EOS] token, predictions is a list of token id list
         eos_token_id = tokenizer.eos_token_id
         predictions = [p[:p.index(eos_token_id) + 1] if eos_token_id in p else p for
@@ -176,14 +211,21 @@ def get_multirc_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedToke
     return evaluate_fn
 
 
-def get_squad_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]) -> Callable:
+def get_squad_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+                        metric_path: Optional[str] = None,
+                        ) -> Callable:
     """
     Get the evaluate function for SQuAD tasks.
     """
 
     def evaluate_fn(predictions: Union[torch.Tensor, List[int], List[torch.LongTensor]], labels: torch.Tensor,
                     ids: List[str], **kwargs):
-        metric = load(*TASK_MAPPING_DATASET_ARGUMENTS['squad'])
+
+        metric = None
+        if metric_path:
+            metric = load_metric(metric_path)
+        else:
+            metric = load(*TASK_MAPPING_DATASET_ARGUMENTS['squad'])
         # cut up tokens after the first [EOS] token, predictions is a list of token id list
         eos_token_id = tokenizer.eos_token_id
         predictions = [p[:p.index(eos_token_id) + 1] if eos_token_id in p else p for
@@ -206,15 +248,26 @@ def get_squad_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokeni
     return evaluate_fn
 
 
-def get_openbookqa_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]) -> Callable:
+def get_openbookqa_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+                             metric_path: Optional[str] = None,
+                             ) -> Callable:
     """
     Get the evaluate function for OpenBookQA tasks.
     """
 
     def evaluate_fn(predictions: Union[torch.Tensor, List[int], List[torch.LongTensor]], labels: torch.Tensor,
                     **kwargs):
-        metric = load("accuracy")
-        label_mapping_id = get_label_mapping_id('openbookqa')
+
+        metric = None
+        if metric_path:
+            metric = load_metric('/workdir/metrics/accuracy')
+        else:
+            metric = load("accuracy")
+        label_mapping_id = None
+        if metric_path:
+            label_mapping_id = get_label_mapping_id('openbookqa', os.path.dirname(metric_path))
+        else:
+            label_mapping_id = get_label_mapping_id('openbookqa')
         predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)  # string lengths batch
         predictions = [label_mapping_id[p] if p in label_mapping_id else -1
                        for p in predictions]
@@ -228,7 +281,9 @@ def get_openbookqa_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedT
 
 
 def get_copa_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
-                         raw_eval_dataset: Dataset) -> Callable:
+                       raw_eval_dataset: Dataset,
+                       metric_path: Optional[str] = None,
+                       ) -> Callable:
     """
     Get the evaluate function for SuperGLUE-COPA task.
     """
@@ -240,7 +295,10 @@ def get_copa_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokeniz
     }
 
     def evaluate_fn(predictions: Union[torch.Tensor, List[int], List[torch.LongTensor]], ids: List[int], **kwargs):
-        metric = load('super_glue', 'copa')
+        if metric_path:
+            metric = load_metric(metric_path, 'copa')
+        else:
+            metric = load('super_glue', 'copa')
         # cut up tokens after the first [EOS] token, predictions is a list of token id list
         eos_token_id = tokenizer.eos_token_id
         predictions = [p[:p.index(eos_token_id) + 1] if eos_token_id in p else p for
@@ -253,7 +311,7 @@ def get_copa_evaluate_fn(tokenizer: Union[PreTrainedTokenizer, PreTrainedTokeniz
     return evaluate_fn
 
 
-def gather_predictions_references_by_causal_lm_loss(
+def gather_predictions_references_by_casual_lm_loss(
         ids_list: List[int],
         answer_ids_list: List[int],
         choice_ids_list: List[int],
