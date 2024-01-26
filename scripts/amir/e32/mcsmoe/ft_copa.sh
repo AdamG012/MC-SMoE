@@ -47,6 +47,7 @@ accelerate launch --config_file static/finetune_config.yaml \
   mcsmoe/permute-model.py \
   --checkpoint="${OUTPUT_DIR}/latest" \
   --save_dir="${OUTPUT_PERM_DIR}" \
+  --strategy="weight" \
   --include_wo=True
 
 # STEP 3 RUN
