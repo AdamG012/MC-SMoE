@@ -49,6 +49,7 @@ class MoECausalLMDistillationOutputWithPastAndCrossAttention(ModelOutput):
     lm_loss: torch.FloatTensor = None
 
 
+@dataclass
 class MoEDistillationOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     kd_loss: torch.FloatTensor = None
