@@ -28,7 +28,7 @@ accelerate launch --config_file static/finetune_config.yaml \
   --checkpoint="${CHECKPOINT}" \
   --dataset_path="${DATASET_PATH}" \
   --metric_path="${METRIC_PATH}" \
-  --num_epochs=20 \
+  --num_epochs=80 \
   --no_eval_until_epochs=1 \
   --save_each_epoch=False \
   --preprocessing_num_workers=8 \

@@ -481,7 +481,8 @@ def merge_and_distill_downstream_for_recover(
                 if eval_res[metric_key] > best_eval:
                     best_eval = eval_res[metric_key]
                     accelerator.wait_for_everyone()
-                    wandb.summary["best_" + metric_key] = best_eval
+                    if accelerator.is_local_main_process:
+                        wandb.summary["best_" + metric_key] = best_eval
                     unwrapped_model = accelerator.unwrap_model(model)
                     unwrapped_model.save_pretrained(os.path.join(output_dir, "best"),
                                                     is_main_process=accelerator.is_local_main_process,
