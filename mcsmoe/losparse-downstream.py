@@ -389,7 +389,7 @@ def distill_downstream_for_losparse(
                                     dtype=eval_labels.dtype,
                                     device=eval_labels.device) * -100
                         ], dim=-1)
-                        eval_logits = accelerator.gather(outputs.logits)
+                        eval_logits = accelerator.gather(outputs.student_logits)
                     else:
                         # Amir & Rima
                         eval_labels = accelerator.pad_across_processes(eval_batch['labels'], dim=1, pad_index=tokenizer.pad_token_id)
@@ -407,7 +407,7 @@ def distill_downstream_for_losparse(
                                     dtype=eval_labels_dtype,
                                     device=eval_labels_device) * -100
                         ], dim=-1)
-                        eval_logits = accelerator.pad_across_processes(outputs.logits, dim=1, pad_index=-100)
+                        eval_logits = accelerator.pad_across_processes(outputs.student_logits, dim=1, pad_index=-100)
                         eval_logits = accelerator.gather(eval_logits)
 
                 losses = torch.cat(losses)
