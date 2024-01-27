@@ -192,6 +192,12 @@ def merge_and_distill_downstream_for_recover(
     accelerator = Accelerator(gradient_accumulation_steps=gradient_accumulation_steps)
     set_seed(42)
 
+
+    accelerator = Accelerator(gradient_accumulation_steps=gradient_accumulation_steps)
+    # Adam adding in ability to check num gpus from config
+    state = AcceleratorState()
+    num_devices = state.num_processes
+
     if accelerator.is_local_main_process:
         run_name = f"merge-by-usage-weighting-{task}-global-{similarity_base}-{merging_strategy}" if globally_group else (
             f"merge-by-usage-weighting-{task}-uniform-{similarity_base}-{merging_strategy}")

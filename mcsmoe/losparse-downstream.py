@@ -173,6 +173,11 @@ def distill_downstream_for_losparse(
     accelerator = Accelerator(gradient_accumulation_steps=gradient_accumulation_steps)
     set_seed(42)
 
+    accelerator = Accelerator(gradient_accumulation_steps=gradient_accumulation_steps)
+    # Adam adding in ability to check num gpus from config
+    state = AcceleratorState()
+    num_devices = state.num_processes
+
     if accelerator.is_local_main_process:
         run_name = f"losparse-{task}-rank-{str(low_rank_factor)}-sparse-{str(final_threshold)}"
         wandb.init(project="mc-smoe",
