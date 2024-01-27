@@ -5,7 +5,7 @@ from typing import Optional, Union, List
 import torch
 import transformers.utils.logging as hf_logging
 from accelerate.utils import set_seed
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from evaluate import load
 from fire import Fire
 from torch.utils.data import DataLoader
@@ -86,7 +86,15 @@ def merge_fsgpt_by_usage_frequency_weighting(
         mlm=False,
         keys_to_ignore=["answer_idx", "choice_idx", "idx"]
     )
-    raw_dataset = load_dataset(*TASK_MAPPING_DATASET_ARGUMENTS[task])
+
+
+    # Adam
+    raw_dataset = None
+    if dataset_path:
+        raw_dataset = load_from_disk(dataset_path=dataset_path)
+    else:
+        raw_dataset = load_dataset(*TASK_MAPPING_DATASET_ARGUMENTS[task])
+
     dataset = raw_dataset["train"].select(range(min(num_samples_for_merging, len(raw_dataset["train"]))))
     dataset = build_index_for_dataset(dataset)
     dataset = dataset.map(

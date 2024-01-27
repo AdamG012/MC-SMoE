@@ -399,6 +399,7 @@ def distill_downstream_for_losparse(
                 unwrapped_model = accelerator.unwrap_model(model)
                 unwrapped_model.save_pretrained(os.path.join(output_dir, "latest"),
                                                 is_main_process=accelerator.is_local_main_process,
+                                                safe_serialization=False,
                                                 save_function=accelerator.save)
                 if accelerator.is_local_main_process:
                     tokenizer.save_pretrained(os.path.join(output_dir, "latest"))
@@ -417,6 +418,7 @@ def distill_downstream_for_losparse(
     unwrapped_model = accelerator.unwrap_model(model)
     unwrapped_model.save_pretrained(os.path.join(output_dir, "latest"),
                                     is_main_process=accelerator.is_local_main_process,
+                                    safe_serialization=False,
                                     save_function=accelerator.save)
     if accelerator.is_local_main_process:
         tokenizer.save_pretrained(os.path.join(output_dir, "latest"))
