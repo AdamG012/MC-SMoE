@@ -279,7 +279,7 @@ def finetune_on_downstream_task(
                     with torch.no_grad():
                         outputs = model(**eval_batch)
 
-
+                    eval_logits = None
                     if num_devices <= 1:
                         eval_labels = accelerator.gather(eval_batch['labels'])
                         output_labels += torch.cat([
@@ -289,7 +289,7 @@ def finetune_on_downstream_task(
                                     device=eval_labels.device) * -100
                         ], dim=-1)
                         eval_logits = accelerator.gather(outputs.logits)
-                    elif num_devices == 2:
+                    else:
                         # Amir & Rima
                         eval_labels = accelerator.pad_across_processes(eval_batch['labels'], dim=1, pad_index=tokenizer.pad_token_id)
                         eval_labels = accelerator.gather(eval_labels)
@@ -308,12 +308,6 @@ def finetune_on_downstream_task(
                         ], dim=-1)
                         eval_logits = accelerator.pad_across_processes(outputs.logits, dim=1, pad_index=-100)
                         eval_logits = accelerator.gather(eval_logits)
-                    elif num_devices == 4:
-                        pass
-                    elif num_devices == 8:
-                        pass
-                    else:
-                        raise ValueError("Unsupported number of gpus")
 
                     output_predictions += eval_logits.argmax(dim=-1).tolist()
                     if task in ["squad", "squad_v2", "hotpotqa"]:

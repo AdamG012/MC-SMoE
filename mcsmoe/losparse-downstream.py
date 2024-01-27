@@ -3,6 +3,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional, Tuple, List, Union
 
+import numpy as np
 import torch
 import wandb
 from accelerate import Accelerator
@@ -373,20 +374,36 @@ def distill_downstream_for_losparse(
                             extra_keys_eval_batch[key] = eval_batch.pop(key)
                     with torch.no_grad():
                         outputs = model(**eval_batch)
-                    eval_labels = accelerator.gather(eval_batch['labels'])
-                    output_labels += torch.cat([
-                        eval_labels,
-                        torch.ones(eval_labels.shape[0], tokenizer.model_max_length - eval_labels.shape[1],
-                                   dtype=eval_labels.dtype,
-                                   device=eval_labels.device) * -100
-                    ], dim=-1)
-                    eval_logits = accelerator.gather(outputs.student_logits)
-                    output_predictions += eval_logits.argmax(dim=-1).tolist()
-                    if task in ["squad", "squad_v2", "hotpotqa"]:
-                        output_ids += extra_keys_eval_batch["id"]
-                    elif task == "copa" or task == "multirc":
-                        output_ids += extra_keys_eval_batch["idx"]
-                    losses.append(accelerator.gather_for_metrics(outputs["task_loss"]))
+
+                    if num_devices <= 1:
+                        eval_labels = accelerator.gather(eval_batch['labels'])
+                        output_labels += torch.cat([
+                            eval_labels,
+                            torch.ones(eval_labels.shape[0], tokenizer.model_max_length - eval_labels.shape[1],
+                                    dtype=eval_labels.dtype,
+                                    device=eval_labels.device) * -100
+                        ], dim=-1)
+                        eval_logits = accelerator.gather(outputs.logits)
+                    else:
+                        # Amir & Rima
+                        eval_labels = accelerator.pad_across_processes(eval_batch['labels'], dim=1, pad_index=tokenizer.pad_token_id)
+                        eval_labels = accelerator.gather(eval_labels)
+                        eval_labels_device = eval_labels.device
+                        eval_labels_shape_0 = eval_labels.shape[0]
+                        eval_labels_shape_1 = eval_labels.shape[1]
+                        eval_labels_dtype = eval_labels.dtype
+                        eval_labels = eval_labels.cpu().numpy()
+                        # https://huggingface.co/learn/nlp-course/chapter7/5?fw=pt
+                        eval_labels = np.where(eval_labels != -100, eval_labels, tokenizer.pad_token_id)
+                        output_labels += torch.cat([
+                            torch.from_numpy(eval_labels).to(eval_labels_device),
+                            torch.ones(eval_labels_shape_0, tokenizer.model_max_length - eval_labels_shape_1,
+                                    dtype=eval_labels_dtype,
+                                    device=eval_labels_device) * -100
+                        ], dim=-1)
+                        eval_logits = accelerator.pad_across_processes(outputs.logits, dim=1, pad_index=-100)
+                        eval_logits = accelerator.gather(eval_logits)
+
                 losses = torch.cat(losses)
                 eval_loss = torch.mean(losses)
                 output_labels = torch.stack(output_labels, dim=0)
