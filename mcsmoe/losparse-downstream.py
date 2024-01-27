@@ -409,7 +409,12 @@ def distill_downstream_for_losparse(
                         ], dim=-1)
                         eval_logits = accelerator.pad_across_processes(outputs.student_logits, dim=1, pad_index=-100)
                         eval_logits = accelerator.gather(eval_logits)
-
+                    output_predictions += eval_logits.argmax(dim=-1).tolist()
+                    if task in ["squad", "squad_v2", "hotpotqa"]:
+                        output_ids += extra_keys_eval_batch["id"]
+                    elif task == "copa" or task == "multirc":
+                        output_ids += extra_keys_eval_batch["idx"]
+                    losses.append(accelerator.gather_for_metrics(outputs["loss"]))
                 losses = torch.cat(losses)
                 eval_loss = torch.mean(losses)
                 output_labels = torch.stack(output_labels, dim=0)
