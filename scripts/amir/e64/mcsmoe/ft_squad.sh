@@ -5,8 +5,8 @@ export CUDA_VISIBLE_DEVICES=0
 TASK="squad";
 NUM_EXPERTS=64;
 CHECKPOINT="/workdir/switch-base-${NUM_EXPERTS}";
-DATASET_PATH="/workdir/datasets/glue-sst2";
-METRIC_PATH="/workdir/metrics/glue"
+DATASET_PATH="/workdir/datasets/squad";
+METRIC_PATH="/workdir/metrics/squad"
 GS_LOCATION="gs://xcloud-shared/ayazdan/switch-moe/results";
 export WANDB_MODE=offline;
 cd "/workdir/MC-SMoE/" || exit;
