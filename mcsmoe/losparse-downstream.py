@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import wandb
 from accelerate import Accelerator
+from accelerate.state import AcceleratorState
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset, load_from_disk
